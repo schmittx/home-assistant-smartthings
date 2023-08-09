@@ -89,7 +89,7 @@ class SmartThingsLockEntity(SmartThingsEntity, LockEntity):
         """Last change triggered by."""
         status = self._device.status.attributes[self.entity_description.key]
         if isinstance(status.data, dict):
-            if code_id := status.data.get("code_id"):
+            if code_id := status.data.get("codeId"):
                 if code_name := self._lock_codes.get(code_id):
                     return code_name
             if method := status.data.get("method"):
