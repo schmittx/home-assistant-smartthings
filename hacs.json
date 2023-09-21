@@ -1,7 +1,7 @@
 {
 	"name": "SmartThings",
 	"content_in_root": false,
-	"homeassistant": "2023.8.0",
+	"homeassistant": "2023.9.0",
 	"iot_class": "Cloud Push",
 	"render_readme": true
 }
