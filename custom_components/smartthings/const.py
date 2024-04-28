@@ -58,6 +58,7 @@ DEVICE_INFO_MAP = {
     "Samsung Microwave": ("Samsung", "MC17T8000CS"),
     "Schlage Touchscreen Deadbolt Door Lock": ("Schlage", "BE469NX"),
     "SmartThings Button": ("Aeotec", "GP-AEOBTNUS"),
+    "water-battery-tamper": ("Aeotec", "Water Sensor 7"),
     "water-temp-battery-tempOffset": ("Aeotec", "GP-AEOWLSUS"),
 }
 

@@ -41,6 +41,14 @@ BINARY_SENSOR_DESCRIPTIONS: dict[str, list[SmartThingsBinarySensorEntityDescript
             is_on=lambda value: bool(value == "unlocked"),
         ),
     ],
+    Capability.tamper_alert: [
+        SmartThingsBinarySensorEntityDescription(
+            key=Attribute.tamper,
+            name="Tamper Detected",
+            device_class=BinarySensorDeviceClass.TAMPER,
+            is_on=lambda value: bool(value == "detected"),
+        ),
+    ],
     Capability.water_sensor: [
         SmartThingsBinarySensorEntityDescription(
             key=Attribute.water,
