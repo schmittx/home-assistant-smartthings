@@ -191,7 +191,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             # modules when its created. In the future this should be
             # refactored to not do this.
             broker = await hass.async_add_import_executor_job(
-                DeviceBroker, hass, entry, token, smart_app, devices, scenes
+                DeviceBroker, hass, entry, token, smart_app, devices, rooms, scenes,
             )
         broker.connect()
         hass.data[DOMAIN][DATA_BROKERS][entry.entry_id] = broker
