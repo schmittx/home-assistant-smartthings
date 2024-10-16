@@ -1,10 +1,8 @@
 """Constants used by the SmartThings component and platforms."""
 from datetime import timedelta
+from enum import StrEnum
 import re
 
-from pysmartthings import Attribute, Capability
-
-from homeassistant.backports.enum import StrEnum
 from homeassistant.const import Platform
 
 DOMAIN = "smartthings"
