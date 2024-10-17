@@ -72,7 +72,7 @@ async def async_setup_entry(
 class SmartThingsFanEntity(SmartThingsEntity, FanEntity):
     """Define a SmartThings fan entity."""
 
-    _attr_supported_features = FanEntityFeature.SET_SPEED
+    _attr_supported_features = FanEntityFeature.SET_SPEED | FanEntityFeature.TURN_OFF | FanEntityFeature.TURN_ON
     entity_description: SmartThingsFanEntityDescription
 
     async def async_set_percentage(self, percentage: int) -> None:
