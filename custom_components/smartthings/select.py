@@ -11,7 +11,6 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import SmartThingsEntity
 from .const import (
     DATA_BROKERS,
     DOMAIN,
@@ -19,6 +18,7 @@ from .const import (
     CustomCapability,
     CustomComponent,
 )
+from .entity import SmartThingsEntity
 
 HOOD_FAN_SPEED_TO_STATE = {
     "0": "off",

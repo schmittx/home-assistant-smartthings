@@ -16,12 +16,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import SmartThingsEntity
 from .const import (
     DATA_BROKERS,
     DOMAIN,
     SIGNAL_SMARTTHINGS_BUTTON,
 )
+from .entity import SmartThingsEntity
 
 @dataclass
 class SmartThingsEventEntityDescription(EventEntityDescription):

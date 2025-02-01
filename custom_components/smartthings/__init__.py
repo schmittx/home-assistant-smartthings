@@ -4,30 +4,23 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Iterable
 from http import HTTPStatus
-import json
 import logging
 
 from aiohttp.client_exceptions import ClientConnectionError, ClientResponseError
 from pysmartapp.event import EVENT_TYPE_DEVICE
-from pysmartthings import Attribute, Capability, DeviceEntity, RoomEntity, SmartThings
+from pysmartthings import APIInvalidGrant, Attribute, Capability, DeviceEntity, SmartThings
 
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
-from homeassistant.const import (
-    ATTR_BATTERY_LEVEL,
-    CONF_ACCESS_TOKEN,
-    CONF_CLIENT_ID,
-    CONF_CLIENT_SECRET,
-)
+from homeassistant.const import CONF_ACCESS_TOKEN, CONF_CLIENT_ID, CONF_CLIENT_SECRET
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryError,
+    ConfigEntryNotReady,
+)
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.dispatcher import (
-    async_dispatcher_connect,
-    async_dispatcher_send,
-)
-from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity import Entity, EntityDescription
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.loader import async_get_loaded_integration
@@ -40,7 +33,6 @@ from .const import (
     CONF_REFRESH_TOKEN,
     DATA_BROKERS,
     DATA_MANAGER,
-    DEVICE_INFO_MAP,
     DOMAIN,
     PLATFORMS,
     SIGNAL_SMARTTHINGS_BUTTON,
@@ -115,7 +107,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     # to import the modules.
     await async_get_loaded_integration(hass, DOMAIN).async_get_platforms(PLATFORMS)
 
-    remove_entry = False
     try:
         # See if the app is already setup. This occurs when there are
         # installs in multiple SmartThings locations (valid use-case)
@@ -196,33 +187,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         broker.connect()
         hass.data[DOMAIN][DATA_BROKERS][entry.entry_id] = broker
 
+    except APIInvalidGrant as ex:
+        raise ConfigEntryAuthFailed from ex
     except ClientResponseError as ex:
         if ex.status in (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN):
-            _LOGGER.exception(
-                (
-                    "Unable to setup configuration entry '%s' - please reconfigure the"
-                    " integration"
-                ),
-                entry.title,
-            )
-            remove_entry = True
-        else:
-            _LOGGER.debug(ex, exc_info=True)
-            raise ConfigEntryNotReady from ex
+            raise ConfigEntryError(
+                "The access token is no longer valid. Please remove the integration and set up again."
+            ) from ex
+        _LOGGER.debug(ex, exc_info=True)
+        raise ConfigEntryNotReady from ex
     except (ClientConnectionError, RuntimeWarning) as ex:
         _LOGGER.debug(ex, exc_info=True)
         raise ConfigEntryNotReady from ex
-
-    if remove_entry:
-        hass.async_create_task(hass.config_entries.async_remove(entry.entry_id))
-        # only create new flow if there isn't a pending one for SmartThings.
-        if not hass.config_entries.flow.async_progress_by_handler(DOMAIN):
-            hass.async_create_task(
-                hass.config_entries.flow.async_init(
-                    DOMAIN, context={"source": SOURCE_IMPORT}
-                )
-            )
-        return False
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
@@ -418,88 +394,3 @@ class DeviceBroker:
             async_dispatcher_send(self._hass, SIGNAL_SMARTTHINGS_BUTTON, updated_buttons)
         if updated_devices:
             async_dispatcher_send(self._hass, SIGNAL_SMARTTHINGS_UPDATE, updated_devices)
-
-
-class SmartThingsEntity(Entity):
-    """Defines a SmartThings entity."""
-
-    _attr_should_poll = False
-
-    def __init__(
-        self,
-        device: DeviceEntity,
-        capability: Capability,
-        description: EntityDescription,
-        room: RoomEntity,
-    ) -> None:
-        """Initialize the instance."""
-        self._device = device
-        self._dispatcher_remove = None
-        self._capability = capability
-        self._room = room
-        self.entity_description = description
-        _LOGGER.debug(
-            "Device status attributes:\n - device: %s\n - attributes: %s",
-            self._device.label,
-            json.dumps(self._device.status.attributes),
-        )
-        for id, status in self._device.status.components.items():
-            _LOGGER.debug(
-                "Device status component:\n - device: %s\n - component: %s\n - attributes: %s",
-                self._device.label,
-                id,
-                json.dumps(status.attributes),
-            )
-
-    async def async_added_to_hass(self):
-        """Device added to hass."""
-
-        async def async_update_state(devices):
-            """Update device state."""
-            if self._device.device_id in devices:
-                await self.async_update_ha_state(True)
-
-        self._dispatcher_remove = async_dispatcher_connect(
-            self.hass, SIGNAL_SMARTTHINGS_UPDATE, async_update_state
-        )
-
-    async def async_will_remove_from_hass(self) -> None:
-        """Disconnect the device when removed."""
-        if self._dispatcher_remove:
-            self._dispatcher_remove()
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Get attributes about the device."""
-        name = self._device.name
-        manufacturer, model = DEVICE_INFO_MAP.get(name, ("Unknown", name))
-
-        return DeviceInfo(
-            configuration_url="https://account.smartthings.com",
-            identifiers={(DOMAIN, self._device.device_id)},
-            manufacturer=manufacturer,
-            model=model,
-            name=self._device.label,
-            suggested_area=self._room.name,
-        )
-
-    @property
-    def name(self) -> str:
-        """Return the name of the device."""
-        label = self._device.label
-        if name := self.entity_description.name:
-            return f"{label} {name}"
-        return label
-
-    @property
-    def unique_id(self) -> str:
-        """Return a unique ID."""
-        device_id = self._device.device_id
-        platform = self.platform.platform_name
-        return f"{device_id}-{platform}-{self.entity_description.key}"
-
-    @property
-    def extra_state_attributes(self):
-        """Return device specific state attributes."""
-        state_attrs = {}
-        return state_attrs

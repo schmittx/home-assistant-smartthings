@@ -14,7 +14,6 @@ from homeassistant.util.percentage import (
     percentage_to_ordered_list_item,
 )
 
-from . import SmartThingsEntity
 from .const import (
     DATA_BROKERS,
     DOMAIN,
@@ -22,6 +21,7 @@ from .const import (
     CustomCapability,
     CustomComponent,
 )
+from .entity import SmartThingsEntity
 
 @dataclass
 class SmartThingsLightEntityDescription(LightEntityDescription):

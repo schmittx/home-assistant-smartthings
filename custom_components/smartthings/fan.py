@@ -15,7 +15,6 @@ from homeassistant.util.percentage import (
 )
 from homeassistant.util.scaling import int_states_in_range
 
-from . import SmartThingsEntity
 from .const import (
     DATA_BROKERS,
     DOMAIN,
@@ -23,6 +22,7 @@ from .const import (
     CustomCapability,
     CustomComponent,
 )
+from .entity import SmartThingsEntity
 
 HOOD_FAN_SPEED_TO_STATE = {
     "0": "off",

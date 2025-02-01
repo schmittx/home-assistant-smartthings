@@ -17,13 +17,13 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import SmartThingsEntity
 from .const import (
     DATA_BROKERS,
     DOMAIN,
     CustomAttribute,
     CustomCapability,
 )
+from .entity import SmartThingsEntity
 
 @dataclass
 class SmartThingsBinarySensorEntityDescription(BinarySensorEntityDescription):

@@ -23,8 +23,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
-from . import SmartThingsEntity
 from .const import DATA_BROKERS, DOMAIN
+from .entity import SmartThingsEntity
 
 OVEN_MODE_MAP = {
     "Autocook": "autocook",
