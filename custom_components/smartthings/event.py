@@ -1,4 +1,5 @@
 """Support for event entities through the SmartThings cloud API."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -16,18 +17,16 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import (
-    DATA_BROKERS,
-    DOMAIN,
-    SIGNAL_SMARTTHINGS_BUTTON,
-)
+from .const import DATA_BROKERS, DOMAIN, SIGNAL_SMARTTHINGS_BUTTON
 from .entity import SmartThingsEntity
+
 
 @dataclass
 class SmartThingsEventEntityDescription(EventEntityDescription):
     """Class to describe a SmartThings event entity."""
 
     entity_category: str[EntityCategory] | None = EntityCategory.DIAGNOSTIC
+
 
 EVENT_DESCRIPTIONS: dict[str, list[SmartThingsEventEntityDescription]] = {
     Capability.button: [
@@ -52,13 +51,15 @@ async def async_setup_entry(
     for device in broker.devices.values():
         room = broker.rooms[device.room_id]
         for capability in broker.get_capabilities(device):
-            if attributes := EVENT_DESCRIPTIONS.get(capability):
-                for attribute in attributes:
-                    entities.append(
-                        SmartThingsEventEntity(
-                            device, capability, attribute, room,
-                        )
-                    )
+            entities.extend(
+                SmartThingsEventEntity(
+                    device,
+                    capability,
+                    attribute,
+                    room,
+                )
+                for attribute in EVENT_DESCRIPTIONS.get(capability, [])
+            )
 
     async_add_entities(entities)
 
@@ -74,7 +75,9 @@ class SmartThingsEventEntity(SmartThingsEntity, EventEntity):
         async def async_handle_event(devices):
             """Handle device event."""
             if self._device.device_id in devices:
-                event_type = self._device.status.attributes[self.entity_description.key].value
+                event_type = self._device.status.attributes[
+                    self.entity_description.key
+                ].value
                 self._trigger_event(event_type)
                 self.async_write_ha_state()
 

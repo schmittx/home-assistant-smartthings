@@ -1,4 +1,5 @@
 """Support for binary sensor entities through the SmartThings cloud API."""
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -17,13 +18,9 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import (
-    DATA_BROKERS,
-    DOMAIN,
-    CustomAttribute,
-    CustomCapability,
-)
+from .const import DATA_BROKERS, DOMAIN, CustomAttribute, CustomCapability
 from .entity import SmartThingsEntity
+
 
 @dataclass
 class SmartThingsBinarySensorEntityDescription(BinarySensorEntityDescription):
@@ -32,7 +29,10 @@ class SmartThingsBinarySensorEntityDescription(BinarySensorEntityDescription):
     entity_category: str[EntityCategory] | None = EntityCategory.DIAGNOSTIC
     is_on: Callable[[Any], bool] = lambda value: value
 
-BINARY_SENSOR_DESCRIPTIONS: dict[str, list[SmartThingsBinarySensorEntityDescription]] = {
+
+BINARY_SENSOR_DESCRIPTIONS: dict[
+    str, list[SmartThingsBinarySensorEntityDescription]
+] = {
     Capability.lock: [
         SmartThingsBinarySensorEntityDescription(
             key=Attribute.lock,
@@ -79,13 +79,15 @@ async def async_setup_entry(
     for device in broker.devices.values():
         room = broker.rooms[device.room_id]
         for capability in broker.get_capabilities(device):
-            if attributes := BINARY_SENSOR_DESCRIPTIONS.get(capability):
-                for attribute in attributes:
-                    entities.append(
-                        SmartThingsBinarySensorEntity(
-                            device, capability, attribute, room,
-                        )
-                    )
+            entities.extend(
+                SmartThingsBinarySensorEntity(
+                    device,
+                    capability,
+                    attribute,
+                    room,
+                )
+                for attribute in BINARY_SENSOR_DESCRIPTIONS.get(capability, [])
+            )
 
     async_add_entities(entities)
 

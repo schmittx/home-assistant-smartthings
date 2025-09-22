@@ -1,4 +1,5 @@
 """Support for SmartThings Cloud."""
+
 from __future__ import annotations
 
 import asyncio
@@ -8,7 +9,13 @@ import logging
 
 from aiohttp.client_exceptions import ClientConnectionError, ClientResponseError
 from pysmartapp.event import EVENT_TYPE_DEVICE
-from pysmartthings import APIInvalidGrant, Attribute, Capability, DeviceEntity, SmartThings
+from pysmartthings import (
+    APIInvalidGrant,
+    Attribute,
+    Capability,
+    DeviceEntity,
+    SmartThings,
+)
 
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import CONF_ACCESS_TOKEN, CONF_CLIENT_ID, CONF_CLIENT_SECRET
@@ -182,7 +189,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
             # modules when its created. In the future this should be
             # refactored to not do this.
             broker = await hass.async_add_import_executor_job(
-                DeviceBroker, hass, entry, token, smart_app, devices, rooms, scenes,
+                DeviceBroker,
+                hass,
+                entry,
+                token,
+                smart_app,
+                devices,
+                rooms,
+                scenes,
             )
         broker.connect()
         hass.data[DOMAIN][DATA_BROKERS][entry.entry_id] = broker
@@ -391,6 +405,10 @@ class DeviceBroker:
                 updated_devices.add(device.device_id)
 
         if updated_buttons:
-            async_dispatcher_send(self._hass, SIGNAL_SMARTTHINGS_BUTTON, updated_buttons)
+            async_dispatcher_send(
+                self._hass, SIGNAL_SMARTTHINGS_BUTTON, updated_buttons
+            )
         if updated_devices:
-            async_dispatcher_send(self._hass, SIGNAL_SMARTTHINGS_UPDATE, updated_devices)
+            async_dispatcher_send(
+                self._hass, SIGNAL_SMARTTHINGS_UPDATE, updated_devices
+            )

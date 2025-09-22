@@ -1,4 +1,5 @@
 """SmartApp functionality to receive cloud-push notifications."""
+
 from __future__ import annotations
 
 import asyncio
@@ -54,7 +55,7 @@ from .const import (
     STORAGE_KEY,
     STORAGE_VERSION,
     SUBSCRIPTION_WARNING_LIMIT,
-    CustomCapability
+    CustomCapability,
 )
 
 IGNORED_CAPABILITIES = [
@@ -82,6 +83,7 @@ async def find_app(hass: HomeAssistant, api):
             == hass.data[DOMAIN][CONF_INSTANCE_ID]
         ):
             return app
+    return None
 
 
 async def validate_installed_app(api, installed_app_id: str):
@@ -93,11 +95,7 @@ async def validate_installed_app(api, installed_app_id: str):
     installed_app = await api.installed_app(installed_app_id)
     if installed_app.installed_app_status != InstalledAppStatus.AUTHORIZED:
         raise RuntimeWarning(
-            "Installed SmartApp instance '{}' ({}) is not AUTHORIZED but instead {}".format(
-                installed_app.display_name,
-                installed_app.installed_app_id,
-                installed_app.installed_app_status,
-            )
+            f"Installed SmartApp instance '{installed_app.display_name}' ({installed_app.installed_app_id}) is not AUTHORIZED but instead {installed_app.installed_app_status}"
         )
     return installed_app
 
@@ -188,7 +186,7 @@ async def update_app(hass: HomeAssistant, app):
         )
 
 
-def setup_smartapp(hass, app):
+def setup_smartapp(hass: HomeAssistant, app):
     """Configure an individual SmartApp in hass.
 
     Register the SmartApp with the SmartAppManager so that hass will service
@@ -374,7 +372,9 @@ async def smartapp_sync_subscriptions(
                 device.status.attributes["disabledCapabilities"].value is not None,
             ]
         ):
-            disabled_capabilities = device.status.attributes["disabledCapabilities"].value
+            disabled_capabilities = device.status.attributes[
+                "disabledCapabilities"
+            ].value
             new_capabilities = device.capabilities
             for disabled_capability in disabled_capabilities:
                 if disabled_capability in new_capabilities:

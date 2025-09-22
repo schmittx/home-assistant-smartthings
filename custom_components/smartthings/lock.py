@@ -1,4 +1,5 @@
 """Support for lock entities through the SmartThings cloud API."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -25,9 +26,11 @@ LOCK_ATTR_MAP = {
     "usedCode": "used_code",
 }
 
+
 @dataclass
 class SmartThingsLockEntityDescription(LockEntityDescription):
     """Class to describe a SmartThings lock entity."""
+
 
 LOCK_DESCRIPTIONS: dict[str, list[SmartThingsLockEntityDescription]] = {
     Capability.lock: [
@@ -52,13 +55,15 @@ async def async_setup_entry(
     for device in broker.devices.values():
         room = broker.rooms[device.room_id]
         for capability in broker.get_capabilities(device):
-            if attributes := LOCK_DESCRIPTIONS.get(capability):
-                for attribute in attributes:
-                    entities.append(
-                        SmartThingsLockEntity(
-                            device, capability, attribute, room,
-                        )
-                    )
+            entities.extend(
+                SmartThingsLockEntity(
+                    device,
+                    capability,
+                    attribute,
+                    room,
+                )
+                for attribute in LOCK_DESCRIPTIONS.get(capability, [])
+            )
 
     async_add_entities(entities)
 
@@ -102,7 +107,7 @@ class SmartThingsLockEntity(SmartThingsEntity, LockEntity):
         state_attrs = super().extra_state_attributes
         status = self._device.status.attributes[self.entity_description.key]
         if isinstance(status.data, dict):
-            _LOGGER.debug(f"Lock status Data: {status.data}")
+            _LOGGER.debug("Lock status data: %s", status.data)
             for key, attr in LOCK_ATTR_MAP.items():
                 if value := status.data.get(key):
                     state_attrs[attr] = value
@@ -115,4 +120,4 @@ class SmartThingsLockEntity(SmartThingsEntity, LockEntity):
     def _lock_codes(self) -> dict[str, str]:
         """Return true if the lock is locked."""
         lock_codes = self._device.status.attributes[CustomAttribute.lock_codes].value
-        return json.loads(lock_codes.replace("'\'", ""))
+        return json.loads(lock_codes.replace("''", ""))

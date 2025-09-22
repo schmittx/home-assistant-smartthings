@@ -1,4 +1,5 @@
 """Constants used by the SmartThings component and platforms."""
+
 from datetime import timedelta
 from enum import StrEnum
 import re
@@ -49,7 +50,7 @@ TOKEN_REFRESH_INTERVAL = timedelta(days=14)
 VAL_UID = "^(?:([0-9a-fA-F]{32})|([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}))$"
 VAL_UID_MATCHER = re.compile(VAL_UID)
 
-ATTRIBUTION =  "Data provided by SmartThings"
+ATTRIBUTION = "Data provided by SmartThings"
 DEVICE_INFO_MAP = {
     "Button": ("Aeotec", "GP-AEOBTNUS"),
     "Dome Leak Sensor": ("Dome", "DMWS1"),
@@ -59,6 +60,7 @@ DEVICE_INFO_MAP = {
     "water-battery-tamper": ("Aeotec", "Water Sensor 7"),
     "water-temp-battery-tempOffset": ("Aeotec", "GP-AEOWLSUS"),
 }
+
 
 class CustomComponent(StrEnum):
     """Define custom components."""
@@ -73,7 +75,7 @@ class CustomCapability(StrEnum):
     health_check = "healthCheck"
     hood_fan_speed = "samsungce.hoodFanSpeed"
     lamp = "samsungce.lamp"
-    
+
 
 class CustomAttribute(StrEnum):
     """Define custom attributes."""

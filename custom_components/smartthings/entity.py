@@ -1,4 +1,5 @@
 """Support for SmartThings Cloud."""
+
 from __future__ import annotations
 
 import json
@@ -38,11 +39,11 @@ class SmartThingsEntity(Entity):
             self._device.label,
             json.dumps(self._device.status.attributes),
         )
-        for id, status in self._device.status.components.items():
+        for component_id, status in self._device.status.components.items():
             _LOGGER.debug(
                 "Device status component:\n - device: %s\n - component: %s\n - attributes: %s",
                 self._device.label,
-                id,
+                component_id,
                 json.dumps(status.attributes),
             )
 
@@ -96,5 +97,4 @@ class SmartThingsEntity(Entity):
     @property
     def extra_state_attributes(self):
         """Return device specific state attributes."""
-        state_attrs = {}
-        return state_attrs
+        return {}
