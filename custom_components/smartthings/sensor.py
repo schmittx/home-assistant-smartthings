@@ -232,6 +232,7 @@ CAPABILITY_TO_SENSORS: dict[
                 native_unit_of_measurement=PERCENTAGE,
                 device_class=SensorDeviceClass.BATTERY,
                 entity_category=EntityCategory.DIAGNOSTIC,
+                state_class=SensorStateClass.MEASUREMENT,
             )
         ]
     },
