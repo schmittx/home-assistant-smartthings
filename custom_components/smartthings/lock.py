@@ -1,23 +1,21 @@
-"""Support for lock entities through the SmartThings cloud API."""
+"""Support for locks through the SmartThings cloud API."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-import json
-import logging
 from typing import Any
 
-from pysmartthings import Attribute, Capability
+from pysmartthings import Attribute, Capability, Command
 
-from homeassistant.components.lock import LockEntity, LockEntityDescription
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.components.lock import LockEntity
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import DATA_BROKERS, DOMAIN, CustomAttribute
+from . import SmartThingsConfigEntry
+from .const import MAIN
 from .entity import SmartThingsEntity
 
-LOCK_ATTR_MAP = {
+ST_STATE_LOCKED = "locked"
+ST_LOCK_ATTR_MAP = {
     "codeId": "code_id",
     "codeName": "code_name",
     "lockName": "lock_name",
@@ -27,97 +25,55 @@ LOCK_ATTR_MAP = {
 }
 
 
-@dataclass
-class SmartThingsLockEntityDescription(LockEntityDescription):
-    """Class to describe a SmartThings lock entity."""
-
-
-LOCK_DESCRIPTIONS: dict[str, list[SmartThingsLockEntityDescription]] = {
-    Capability.lock: [
-        SmartThingsLockEntityDescription(
-            key=Attribute.lock,
-            name=None,
-        ),
-    ],
-}
-
-_LOGGER = logging.getLogger(__name__)
-
-
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    entry: SmartThingsConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Add lock entities for a config entry."""
-    broker = hass.data[DOMAIN][DATA_BROKERS][config_entry.entry_id]
-    entities: list[SmartThingsLockEntity] = []
-    for device in broker.devices.values():
-        room = broker.rooms[device.room_id]
-        for capability in broker.get_capabilities(device):
-            entities.extend(
-                SmartThingsLockEntity(
-                    device,
-                    capability,
-                    attribute,
-                    room,
-                )
-                for attribute in LOCK_DESCRIPTIONS.get(capability, [])
-            )
-
-    async_add_entities(entities)
+    """Add locks for a config entry."""
+    entry_data = entry.runtime_data
+    async_add_entities(
+        SmartThingsLock(entry_data.client, device, {Capability.LOCK})
+        for device in entry_data.devices.values()
+        if Capability.LOCK in device.status[MAIN]
+    )
 
 
-class SmartThingsLockEntity(SmartThingsEntity, LockEntity):
-    """Define a SmartThings lock entity."""
+class SmartThingsLock(SmartThingsEntity, LockEntity):
+    """Define a SmartThings lock."""
 
-    entity_description: SmartThingsLockEntityDescription
+    _attr_name = None
 
     async def async_lock(self, **kwargs: Any) -> None:
-        """Lock the lock."""
-        await self._device.lock(set_status=True)
-        self.async_write_ha_state()
+        """Lock the device."""
+        await self.execute_device_command(
+            Capability.LOCK,
+            Command.LOCK,
+        )
 
     async def async_unlock(self, **kwargs: Any) -> None:
-        """Unlock the lock."""
-        await self._device.unlock(set_status=True)
-        self.async_write_ha_state()
+        """Unlock the device."""
+        await self.execute_device_command(
+            Capability.LOCK,
+            Command.UNLOCK,
+        )
 
     @property
-    def is_locked(self) -> bool | None:
-        """Return true if the lock is locked."""
-        value = self._device.status.attributes[self.entity_description.key].value
-        return bool(value == "locked")
-
-    @property
-    def changed_by(self) -> str | None:
-        """Last change triggered by."""
-        status = self._device.status.attributes[self.entity_description.key]
-        if isinstance(status.data, dict):
-            if code_id := status.data.get("codeId"):
-                if code_name := self._lock_codes.get(code_id):
-                    return code_name
-            if method := status.data.get("method"):
-                return method
-        return None
+    def is_locked(self) -> bool:
+        """Return true if lock is locked."""
+        return (
+            self.get_attribute_value(Capability.LOCK, Attribute.LOCK) == ST_STATE_LOCKED
+        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return device specific state attributes."""
-        state_attrs = super().extra_state_attributes
-        status = self._device.status.attributes[self.entity_description.key]
+        state_attrs = {}
+        status = self._internal_state[Capability.LOCK][Attribute.LOCK]
+        if status.value:
+            state_attrs["lock_state"] = status.value
         if isinstance(status.data, dict):
-            _LOGGER.debug("Lock status data: %s", status.data)
-            for key, attr in LOCK_ATTR_MAP.items():
-                if value := status.data.get(key):
-                    state_attrs[attr] = value
-                    if attr == "code_id":
-                        if code_name := self._lock_codes.get(value):
-                            state_attrs["code_name"] = code_name
+            for st_attr, ha_attr in ST_LOCK_ATTR_MAP.items():
+                if (data_val := status.data.get(st_attr)) is not None:
+                    state_attrs[ha_attr] = data_val
         return state_attrs
-
-    @property
-    def _lock_codes(self) -> dict[str, str]:
-        """Return true if the lock is locked."""
-        lock_codes = self._device.status.attributes[CustomAttribute.lock_codes].value
-        return json.loads(lock_codes.replace("''", ""))

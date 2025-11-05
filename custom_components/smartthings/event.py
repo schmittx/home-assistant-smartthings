@@ -1,86 +1,63 @@
-"""Support for event entities through the SmartThings cloud API."""
+"""Support for events through the SmartThings cloud API."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from typing import cast
 
-from pysmartthings import Attribute, Capability
+from pysmartthings import Attribute, Capability, Component, DeviceEvent, SmartThings
 
-from homeassistant.components.event import (
-    EventDeviceClass,
-    EventEntity,
-    EventEntityDescription,
-)
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EntityCategory
+from homeassistant.components.event import EventDeviceClass, EventEntity
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import DATA_BROKERS, DOMAIN, SIGNAL_SMARTTHINGS_BUTTON
+from . import FullDevice, SmartThingsConfigEntry
 from .entity import SmartThingsEntity
-
-
-@dataclass
-class SmartThingsEventEntityDescription(EventEntityDescription):
-    """Class to describe a SmartThings event entity."""
-
-    entity_category: str[EntityCategory] | None = EntityCategory.DIAGNOSTIC
-
-
-EVENT_DESCRIPTIONS: dict[str, list[SmartThingsEventEntityDescription]] = {
-    Capability.button: [
-        SmartThingsEventEntityDescription(
-            key=Attribute.button,
-            name="Pressed",
-            device_class=EventDeviceClass.BUTTON,
-            event_types=["pushed", "double", "held"],
-        ),
-    ],
-}
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    entry: SmartThingsConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Add event entities for a config entry."""
-    broker = hass.data[DOMAIN][DATA_BROKERS][config_entry.entry_id]
-    entities: list[SmartThingsEventEntity] = []
-    for device in broker.devices.values():
-        room = broker.rooms[device.room_id]
-        for capability in broker.get_capabilities(device):
-            entities.extend(
-                SmartThingsEventEntity(
-                    device,
-                    capability,
-                    attribute,
-                    room,
-                )
-                for attribute in EVENT_DESCRIPTIONS.get(capability, [])
-            )
-
-    async_add_entities(entities)
-
-
-class SmartThingsEventEntity(SmartThingsEntity, EventEntity):
-    """Define a SmartThings event entity."""
-
-    entity_description: SmartThingsEventEntityDescription
-
-    async def async_added_to_hass(self):
-        """Device added to hass."""
-
-        async def async_handle_event(devices):
-            """Handle device event."""
-            if self._device.device_id in devices:
-                event_type = self._device.status.attributes[
-                    self.entity_description.key
-                ].value
-                self._trigger_event(event_type)
-                self.async_write_ha_state()
-
-        self._dispatcher_remove = async_dispatcher_connect(
-            self.hass, SIGNAL_SMARTTHINGS_BUTTON, async_handle_event
+    """Add events for a config entry."""
+    entry_data = entry.runtime_data
+    async_add_entities(
+        SmartThingsButtonEvent(
+            entry_data.client, device, device.device.components[component]
         )
+        for device in entry_data.devices.values()
+        for component, capabilities in device.status.items()
+        if Capability.BUTTON in capabilities
+    )
+
+
+class SmartThingsButtonEvent(SmartThingsEntity, EventEntity):
+    """Define a SmartThings event."""
+
+    _attr_device_class = EventDeviceClass.BUTTON
+    _attr_translation_key = "button"
+
+    def __init__(
+        self,
+        client: SmartThings,
+        device: FullDevice,
+        component: Component,
+    ) -> None:
+        """Init the class."""
+        super().__init__(client, device, {Capability.BUTTON}, component=component.id)
+        self._attr_name = component.label
+        self._attr_unique_id = (
+            f"{device.device.device_id}_{component.id}_{Capability.BUTTON}"
+        )
+
+    @property
+    def event_types(self) -> list[str]:
+        """Return the event types."""
+        return self.get_attribute_value(
+            Capability.BUTTON, Attribute.SUPPORTED_BUTTON_VALUES
+        )
+
+    def _update_handler(self, event: DeviceEvent) -> None:
+        if event.attribute is Attribute.BUTTON:
+            self._trigger_event(cast(str, event.value))
+        super()._update_handler(event)

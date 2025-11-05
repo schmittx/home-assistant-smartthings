@@ -1,117 +1,98 @@
-"""Support for fan entities through the SmartThings cloud API."""
+"""Support for fans through the SmartThings cloud API."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
 from typing import Any
 
-from homeassistant.components.fan import (
-    FanEntity,
-    FanEntityDescription,
-    FanEntityFeature,
-)
-from homeassistant.config_entries import ConfigEntry
+from pysmartthings import Attribute, Capability, Command, SmartThings
+
+from homeassistant.components.fan import FanEntity, FanEntityFeature
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util.percentage import (
     percentage_to_ranged_value,
     ranged_value_to_percentage,
 )
 from homeassistant.util.scaling import int_states_in_range
 
-from .const import (
-    DATA_BROKERS,
-    DOMAIN,
-    CustomAttribute,
-    CustomCapability,
-    CustomComponent,
-)
+from . import FullDevice, SmartThingsConfigEntry
+from .const import MAIN
 from .entity import SmartThingsEntity
 
-HOOD_FAN_SPEED_TO_STATE = {
-    "0": "off",
-    "1": "low",
-    "2": "medium",
-    "3": "high",
-}
-
-STATE_TO_HOOD_FAN_SPEED = {value: key for key, value in HOOD_FAN_SPEED_TO_STATE.items()}
-
-
-@dataclass
-class SmartThingsFanEntityDescription(FanEntityDescription):
-    """Class to describe a SmartThings fan entity."""
-
-
-FAN_DESCRIPTIONS: dict[str, list[SmartThingsFanEntityDescription]] = {
-    CustomCapability.hood_fan_speed: [
-        SmartThingsFanEntityDescription(
-            key=CustomAttribute.hood_fan_speed,
-            name="Exhaust Fan",
-        ),
-    ],
-}
+SPEED_RANGE = (1, 3)  # off is not included
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    config_entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    entry: SmartThingsConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Add fan entities for a config entry."""
-    broker = hass.data[DOMAIN][DATA_BROKERS][config_entry.entry_id]
-    entities: list[SmartThingsFanEntity] = []
-    for device in broker.devices.values():
-        room = broker.rooms[device.room_id]
-        for capability in broker.get_capabilities(device):
-            entities.extend(
-                SmartThingsFanEntity(
-                    device,
-                    capability,
-                    attribute,
-                    room,
-                )
-                for attribute in FAN_DESCRIPTIONS.get(capability, [])
+    """Add fans for a config entry."""
+    entry_data = entry.runtime_data
+    async_add_entities(
+        SmartThingsFan(entry_data.client, device)
+        for device in entry_data.devices.values()
+        if Capability.SWITCH in device.status[MAIN]
+        and any(
+            capability in device.status[MAIN]
+            for capability in (
+                Capability.FAN_SPEED,
+                Capability.AIR_CONDITIONER_FAN_MODE,
             )
-
-    async_add_entities(entities)
-
-
-class SmartThingsFanEntity(SmartThingsEntity, FanEntity):
-    """Define a SmartThings fan entity."""
-
-    _attr_supported_features = (
-        FanEntityFeature.SET_SPEED
-        | FanEntityFeature.TURN_OFF
-        | FanEntityFeature.TURN_ON
+        )
+        and Capability.THERMOSTAT_COOLING_SETPOINT not in device.status[MAIN]
     )
-    entity_description: SmartThingsFanEntityDescription
+
+
+class SmartThingsFan(SmartThingsEntity, FanEntity):
+    """Define a SmartThings Fan."""
+
+    _attr_name = None
+    _attr_speed_count = int_states_in_range(SPEED_RANGE)
+
+    def __init__(self, client: SmartThings, device: FullDevice) -> None:
+        """Init the class."""
+        super().__init__(
+            client,
+            device,
+            {
+                Capability.SWITCH,
+                Capability.FAN_SPEED,
+                Capability.AIR_CONDITIONER_FAN_MODE,
+            },
+        )
+        self._attr_supported_features = self._determine_features()
+
+    def _determine_features(self):
+        flags = FanEntityFeature.TURN_OFF | FanEntityFeature.TURN_ON
+
+        if self.supports_capability(Capability.FAN_SPEED):
+            flags |= FanEntityFeature.SET_SPEED
+        if self.supports_capability(Capability.AIR_CONDITIONER_FAN_MODE):
+            flags |= FanEntityFeature.PRESET_MODE
+
+        return flags
 
     async def async_set_percentage(self, percentage: int) -> None:
         """Set the speed percentage of the fan."""
-        await self._async_set_percentage(percentage)
-
-    async def _async_set_percentage(self, percentage: int | None) -> None:
-        if percentage is None:
-            speed = self._speed_range[1]
-        elif percentage == 0:
-            speed = 0
+        if percentage == 0:
+            await self.execute_device_command(Capability.SWITCH, Command.OFF)
         else:
-            speed = math.ceil(percentage_to_ranged_value(self._speed_range, percentage))
-        result = await self._device.command(
-            CustomComponent.hood,
-            self._capability,
-            "setHoodFanSpeed",
-            [speed],
-        )
-        if result:
-            self._device.status.components[CustomComponent.hood].update_attribute_value(
-                self.entity_description.key, speed
+            value = math.ceil(percentage_to_ranged_value(SPEED_RANGE, percentage))
+            await self.execute_device_command(
+                Capability.FAN_SPEED,
+                Command.SET_FAN_SPEED,
+                argument=value,
             )
-        # State is set optimistically in the command above, therefore update
-        # the entity state ahead of receiving the confirming push updates
-        self.async_write_ha_state()
+
+    async def async_set_preset_mode(self, preset_mode: str) -> None:
+        """Set the preset_mode of the fan."""
+        await self.execute_device_command(
+            Capability.AIR_CONDITIONER_FAN_MODE,
+            Command.SET_FAN_MODE,
+            argument=preset_mode,
+        )
 
     async def async_turn_on(
         self,
@@ -120,59 +101,51 @@ class SmartThingsFanEntity(SmartThingsEntity, FanEntity):
         **kwargs: Any,
     ) -> None:
         """Turn the fan on."""
-        await self._async_set_percentage(percentage)
+        if (
+            FanEntityFeature.SET_SPEED in self._attr_supported_features
+            and percentage is not None
+        ):
+            await self.async_set_percentage(percentage)
+        else:
+            await self.execute_device_command(Capability.SWITCH, Command.ON)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the fan off."""
-        await self._async_set_percentage(0)
+        await self.execute_device_command(Capability.SWITCH, Command.OFF)
 
     @property
     def is_on(self) -> bool:
         """Return true if fan is on."""
-        return bool(self._speed)
+        return self.get_attribute_value(Capability.SWITCH, Attribute.SWITCH) == "on"
 
     @property
-    def percentage(self) -> int:
+    def percentage(self) -> int | None:
         """Return the current speed percentage."""
-        return ranged_value_to_percentage(self._speed_range, self._speed)
-
-    @property
-    def speed_count(self) -> int:
-        """Return the number of speeds the fan supports."""
-        return int_states_in_range(self._speed_range)
-
-    @property
-    def _speed(self) -> int:
-        """Return true if fan is on."""
-        return (
-            self._device.status.components[CustomComponent.hood]
-            .attributes[self.entity_description.key]
-            .value
+        return ranged_value_to_percentage(
+            SPEED_RANGE,
+            self.get_attribute_value(Capability.FAN_SPEED, Attribute.FAN_SPEED),
         )
 
     @property
-    def _speed_list(self) -> list[int]:
-        """Return valid speeds."""
-        speed_list = (
-            self._device.status.components[CustomComponent.hood]
-            .attributes[CustomAttribute.supported_hood_fan_speed]
-            .value
+    def preset_mode(self) -> str | None:
+        """Return the current preset mode, e.g., auto, smart, interval, favorite.
+
+        Requires FanEntityFeature.PRESET_MODE.
+        """
+        if not self.supports_capability(Capability.AIR_CONDITIONER_FAN_MODE):
+            return None
+        return self.get_attribute_value(
+            Capability.AIR_CONDITIONER_FAN_MODE, Attribute.FAN_MODE
         )
-        max_speed = (
-            self._device.status.components[CustomComponent.hood]
-            .attributes[CustomAttribute.max_fan_speed]
-            .value
-        )
-        min_speed = (
-            self._device.status.components[CustomComponent.hood]
-            .attributes[CustomAttribute.min_fan_speed]
-            .value
-        )
-        return [
-            speed for speed in speed_list if (speed > min_speed and speed <= max_speed)
-        ]
 
     @property
-    def _speed_range(self) -> tuple[int, int]:
-        """Return speed range."""
-        return (min(self._speed_list), max(self._speed_list))
+    def preset_modes(self) -> list[str] | None:
+        """Return a list of available preset modes.
+
+        Requires FanEntityFeature.PRESET_MODE.
+        """
+        if not self.supports_capability(Capability.AIR_CONDITIONER_FAN_MODE):
+            return None
+        return self.get_attribute_value(
+            Capability.AIR_CONDITIONER_FAN_MODE, Attribute.SUPPORTED_AC_FAN_MODES
+        )

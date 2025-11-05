@@ -1,10 +1,9 @@
 {
   "domain": "smartthings",
   "name": "SmartThings",
-  "after_dependencies": ["cloud"],
   "codeowners": ["@schmittx"],
   "config_flow": true,
-  "dependencies": ["webhook"],
+  "dependencies": ["application_credentials"],
   "dhcp": [
     {
       "hostname": "st*",
@@ -29,9 +28,8 @@
   ],
   "documentation": "https://github.com/schmittx/home-assistant-smartthings",
   "iot_class": "cloud_push",
-  "issue_tracker": "https://github.com/schmittx/home-assistant-smartthings/issues",
-  "loggers": ["httpsig", "pysmartapp", "pysmartthings"],
-  "quality_scale": "gold",
-  "requirements": ["pysmartapp==0.3.5", "pysmartthings==0.7.8"],
-  "version": "1.1.0"
+  "loggers": ["pysmartthings"],
+  "quality_scale": "bronze",
+  "requirements": ["pysmartthings==3.3.1"],
+  "version": "2.0.0"
 }
